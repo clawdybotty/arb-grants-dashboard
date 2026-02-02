@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arbitrum DAO Grant Program — Season 3 Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0d1117; --card: #161b22; --card-hover: #1c2128; --border: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --accent: #58a6ff; --green: #3fb950; --red: #f85149; --orange: #d29922;
+    --purple: #bc8cff; --arb-blue: #28a0f0; --cyan: #39d2c0;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+
+  .container { max-width:1400px; margin:0 auto; padding:20px; }
+
+  /* Header */
+  .header { display:flex; align-items:center; justify-content:space-between; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+  .header h1 { font-size:22px; font-weight:600; }
+  .header h1 span { color:var(--arb-blue); }
+  .header .meta { font-size:12px; color:var(--text-muted); }
+
+  /* Domain tabs */
+  .domain-tabs { display:flex; gap:4px; margin-bottom:20px; flex-wrap:wrap; }
+  .domain-tab {
+    padding:8px 16px; border-radius:8px; cursor:pointer; font-size:13px; font-weight:500;
+    background:var(--card); border:1px solid var(--border); color:var(--text-muted);
+    transition: all 0.2s; user-select:none;
+  }
+  .domain-tab:hover { background:var(--card-hover); color:var(--text); }
+  .domain-tab.active { background:var(--arb-blue); color:white; border-color:var(--arb-blue); }
+  .domain-tab .count { opacity:0.7; font-size:11px; margin-left:4px; }
+
+  /* Grid */
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:14px; margin-bottom:20px; }
+  .grid-3 { grid-template-columns:repeat(3,1fr); }
+  @media(max-width:900px) { .grid-3 { grid-template-columns:1fr; } }
+  .wide { grid-column:span 2; }
+  @media(max-width:640px) { .wide { grid-column:span 1; } }
+
+  /* Cards */
+  .card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+  .card-title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.7px; color:var(--text-muted); margin-bottom:10px; }
+  .stat-big { font-size:32px; font-weight:700; line-height:1.1; }
+  .stat-sub { font-size:12px; color:var(--text-muted); margin-top:4px; }
+  .green{color:var(--green)} .red{color:var(--red)} .orange{color:var(--orange)} .purple{color:var(--purple)} .blue{color:var(--arb-blue)} .cyan{color:var(--cyan)}
+
+  /* KPI row */
+  .kpi-row { display:flex; gap:8px; flex-wrap:wrap; }
+  .kpi { flex:1; min-width:70px; text-align:center; padding:10px 6px; background:rgba(255,255,255,0.02); border-radius:8px; }
+  .kpi .val { font-size:18px; font-weight:700; }
+  .kpi .lbl { font-size:9px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.4px; margin-top:2px; }
+
+  /* Progress */
+  .progress-bar { width:100%; height:6px; background:var(--border); border-radius:3px; overflow:hidden; margin:8px 0; }
+  .progress-fill { height:100%; border-radius:3px; }
+
+  /* Chart */
+  .chart-box { position:relative; height:200px; }
+
+  /* Application table */
+  .app-table-wrap { max-height:500px; overflow-y:auto; border-radius:8px; }
+  .app-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .app-table th { position:sticky; top:0; background:var(--card); text-align:left; padding:8px 10px; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-muted); border-bottom:1px solid var(--border); }
+  .app-table td { padding:7px 10px; border-bottom:1px solid rgba(48,54,61,0.4); }
+  .app-table tr:hover td { background:rgba(255,255,255,0.02); }
+  .app-table a { color:var(--accent); text-decoration:none; }
+  .app-table a:hover { text-decoration:underline; }
+
+  .state-badge {
+    display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600;
+  }
+  .state-approved { background:rgba(63,185,80,0.15); color:var(--green); }
+  .state-rejected { background:rgba(248,81,73,0.1); color:var(--red); }
+  .state-resubmit { background:rgba(210,153,34,0.15); color:var(--orange); }
+  .state-submitted { background:rgba(188,140,255,0.15); color:var(--purple); }
+  .state-cancelled { background:rgba(72,79,88,0.2); color:var(--text-dim); }
+
+  /* Search & filter */
+  .toolbar { display:flex; gap:10px; margin-bottom:12px; flex-wrap:wrap; align-items:center; }
+  .search-box {
+    flex:1; min-width:200px; padding:8px 12px; border-radius:8px; border:1px solid var(--border);
+    background:var(--bg); color:var(--text); font-size:13px; outline:none;
+  }
+  .search-box:focus { border-color:var(--arb-blue); }
+  .filter-btn {
+    padding:6px 12px; border-radius:6px; border:1px solid var(--border); background:var(--card);
+    color:var(--text-muted); font-size:12px; cursor:pointer; transition:all 0.15s;
+  }
+  .filter-btn:hover { background:var(--card-hover); color:var(--text); }
+  .filter-btn.active { background:rgba(40,160,240,0.15); color:var(--arb-blue); border-color:var(--arb-blue); }
+
+  .footer { text-align:center; margin-top:24px; font-size:11px; color:var(--text-muted); padding-bottom:20px; }
+
+  /* Domain comparison */
+  .domain-compare { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; }
+  @media(max-width:900px) { .domain-compare { grid-template-columns:repeat(2,1fr); } }
+  .domain-card {
+    text-align:center; padding:14px 8px; border-radius:8px; cursor:pointer;
+    background:rgba(255,255,255,0.02); border:1px solid transparent; transition:all 0.2s;
+  }
+  .domain-card:hover { border-color:var(--border); background:var(--card-hover); }
+  .domain-card.active { border-color:var(--arb-blue); background:rgba(40,160,240,0.08); }
+  .domain-card .name { font-size:12px; font-weight:600; margin-bottom:6px; }
+  .domain-card .num { font-size:24px; font-weight:700; }
+  .domain-card .sub { font-size:10px; color:var(--text-muted); margin-top:2px; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<div class="header">
+  <div>
+    <h1><span>Arbitrum DAO</span> Grant Program — Season 3</h1>
+    <div class="meta">All Domains · Live Data from Questbook API · <span id="lastUpdated"></span></div>
+  </div>
+</div>
+
+<!-- Domain overview cards -->
+<div id="domainOverview" class="card" style="margin-bottom:20px;">
+  <div class="card-title">Domains Overview — Click to Filter</div>
+  <div id="domainCards" class="domain-compare"></div>
+</div>
+
+<!-- Domain tabs -->
+<div class="domain-tabs" id="domainTabs"></div>
+
+<!-- Stats row -->
+<div class="grid" id="statsRow"></div>
+
+<!-- Charts row -->
+<div class="grid" id="chartsRow"></div>
+
+<!-- Applications table -->
+<div class="card" id="tableCard" style="margin-bottom:20px;">
+  <div class="card-title">Applications <span id="tableCount"></span></div>
+  <div class="toolbar">
+    <input type="text" class="search-box" id="searchBox" placeholder="Search by project name or ID...">
+    <button class="filter-btn active" data-state="all" onclick="toggleState('all')">All</button>
+    <button class="filter-btn" data-state="submitted" onclick="toggleState('submitted')">Pending</button>
+    <button class="filter-btn" data-state="approved" onclick="toggleState('approved')">Approved</button>
+    <button class="filter-btn" data-state="resubmit" onclick="toggleState('resubmit')">Resubmit</button>
+    <button class="filter-btn" data-state="rejected" onclick="toggleState('rejected')">Rejected</button>
+  </div>
+  <div class="app-table-wrap">
+    <table class="app-table">
+      <thead><tr>
+        <th>Project</th><th>Domain</th><th>State</th><th>Submitted</th><th>Age</th><th>Link</th>
+      </tr></thead>
+      <tbody id="appTableBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="footer">
+  Data sourced from Questbook GraphQL API · Arbitrum DAO Season 3 · Castle Labs × Clawd 🐾
+</div>
+
+</div>
+
+<script>
+let DATA = null;
+let activeTab = 'all';
+let activeState = 'all';
+let searchQuery = '';
+let monthlyChart = null;
+let stateChart = null;
+
+const COLORS = {
+  npi: '#28a0f0', devtooling: '#3fb950', events: '#d29922', gaming: '#bc8cff', orbit: '#39d2c0'
+};
+const STATE_COLORS = { approved:'#3fb950', rejected:'#f85149', resubmit:'#d29922', submitted:'#bc8cff', cancelled:'#484f58' };
+
+async function loadData() {
+  try {
+    const resp = await fetch('/data/all-domains-data.json');
+    DATA = await resp.json();
+    document.getElementById('lastUpdated').textContent = new Date(DATA.lastUpdated).toLocaleString();
+    render();
+  } catch(e) {
+    document.getElementById('domainCards').innerHTML = '<p style="color:var(--red)">Failed to load data. Run the fetch script first.</p>';
+  }
+}
+
+function getAllApps(domainKey) {
+  if (domainKey === 'all') {
+    const apps = [];
+    for (const [dk, d] of Object.entries(DATA.domains)) {
+      for (const a of d.applications) {
+        apps.push({...a, domain: dk, domainName: d.info.short});
+      }
+    }
+    return apps.sort((a,b) => b.created - a.created);
+  }
+  return DATA.domains[domainKey].applications.map(a => ({...a, domain: domainKey, domainName: DATA.domains[domainKey].info.short}));
+}
+
+function getStates(domainKey) {
+  if (domainKey === 'all') {
+    const merged = {};
+    for (const d of Object.values(DATA.domains)) {
+      for (const [s,c] of Object.entries(d.states)) { merged[s] = (merged[s]||0) + c; }
+    }
+    return merged;
+  }
+  return DATA.domains[domainKey].states;
+}
+
+function getMonthly(domainKey) {
+  if (domainKey === 'all') {
+    const merged = {};
+    for (const d of Object.values(DATA.domains)) {
+      for (const [m,c] of Object.entries(d.byMonth)) { merged[m] = (merged[m]||0) + c; }
+    }
+    return merged;
+  }
+  return DATA.domains[domainKey].byMonth;
+}
+
+function getTotals(domainKey) {
+  if (domainKey === 'all') {
+    let apps=0, committed=0, disbursed=0;
+    for (const d of Object.values(DATA.domains)) {
+      apps += d.applications.length;
+      committed += d.meta.committedUSD || 0;
+      disbursed += d.meta.disbursedUSD || 0;
+    }
+    return { apps, committed, disbursed };
+  }
+  const d = DATA.domains[domainKey];
+  return { apps: d.applications.length, committed: d.meta.committedUSD||0, disbursed: d.meta.disbursedUSD||0 };
+}
+
+function render() {
+  renderDomainCards();
+  renderTabs();
+  renderStats();
+  renderCharts();
+  renderTable();
+}
+
+function renderDomainCards() {
+  const el = document.getElementById('domainCards');
+  let html = `<div class="domain-card ${activeTab==='all'?'active':''}" onclick="setTab('all')">
+    <div class="name" style="color:var(--text)">All Domains</div>
+    <div class="num blue">${Object.values(DATA.domains).reduce((s,d)=>s+d.applications.length,0)}</div>
+    <div class="sub">total applications</div>
+  </div>`;
+  for (const [dk, d] of Object.entries(DATA.domains)) {
+    const states = d.states;
+    const approved = states.approved||0;
+    const total = d.applications.length;
+    html += `<div class="domain-card ${activeTab===dk?'active':''}" onclick="setTab('${dk}')">
+      <div class="name" style="color:${COLORS[dk]}">${d.info.short}</div>
+      <div class="num" style="color:${COLORS[dk]}">${total}</div>
+      <div class="sub">${approved} approved · ${states.submitted||0} pending</div>
+    </div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderTabs() {
+  const el = document.getElementById('domainTabs');
+  let html = `<div class="domain-tab ${activeTab==='all'?'active':''}" onclick="setTab('all')">All Domains</div>`;
+  for (const [dk, d] of Object.entries(DATA.domains)) {
+    html += `<div class="domain-tab ${activeTab===dk?'active':''}" onclick="setTab('${dk}')">${d.info.name}<span class="count">(${d.applications.length})</span></div>`;
+  }
+  el.innerHTML = html;
+}
+
+function renderStats() {
+  const states = getStates(activeTab);
+  const totals = getTotals(activeTab);
+  const decided = (states.approved||0) + (states.rejected||0) + (states.resubmit||0);
+  const approvalRate = decided > 0 ? ((states.approved||0)/decided*100).toFixed(1) : '0';
+
+  document.getElementById('statsRow').innerHTML = `
+    <div class="card">
+      <div class="card-title">Applications</div>
+      <div class="stat-big blue">${totals.apps}</div>
+      <div class="stat-sub">${decided} decided · ${states.submitted||0} pending</div>
+      <div class="kpi-row" style="margin-top:12px">
+        <div class="kpi"><div class="val green">${states.approved||0}</div><div class="lbl">Approved</div></div>
+        <div class="kpi"><div class="val red">${states.rejected||0}</div><div class="lbl">Rejected</div></div>
+        <div class="kpi"><div class="val orange">${states.resubmit||0}</div><div class="lbl">Resubmit</div></div>
+        <div class="kpi"><div class="val purple">${states.submitted||0}</div><div class="lbl">Pending</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Approval Rate</div>
+      <div class="stat-big green">${approvalRate}%</div>
+      <div class="stat-sub">${states.approved||0} of ${decided} decided applications</div>
+      <div class="progress-bar" style="margin-top:12px"><div class="progress-fill" style="width:${approvalRate}%;background:var(--green)"></div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Budget</div>
+      <div class="stat-big" style="font-size:24px">$${(totals.disbursed/1000).toFixed(0)}K <span style="font-size:14px;color:var(--text-muted)">disbursed</span></div>
+      <div class="stat-sub">$${(totals.committed/1000).toFixed(0)}K committed</div>
+    </div>
+  `;
+}
+
+function renderCharts() {
+  const monthly = getMonthly(activeTab);
+  const states = getStates(activeTab);
+
+  document.getElementById('chartsRow').innerHTML = `
+    <div class="card wide">
+      <div class="card-title">Applications per Month</div>
+      <div class="chart-box"><canvas id="monthlyChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Status Distribution</div>
+      <div style="height:200px;display:flex;align-items:center;justify-content:center">
+        <canvas id="stateChart" style="max-width:200px;max-height:200px"></canvas>
+      </div>
+    </div>
+  `;
+
+  const sortedMonths = Object.keys(monthly).sort();
+  const monthLabels = sortedMonths.map(m => {
+    const [y,mo] = m.split('-');
+    return ['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(mo)] + ' ' + y.slice(2);
+  });
+
+  if (activeTab === 'all') {
+    // Stacked bar per domain
+    const datasets = Object.entries(DATA.domains).map(([dk, d]) => ({
+      label: d.info.short,
+      data: sortedMonths.map(m => d.byMonth[m] || 0),
+      backgroundColor: COLORS[dk] + 'aa',
+      borderRadius: 2,
+    }));
+    monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+      type:'bar', data:{ labels:monthLabels, datasets },
+      options:{
+        responsive:true, maintainAspectRatio:false, plugins:{ legend:{ labels:{ color:'#8b949e',font:{size:10} } } },
+        scales:{
+          x:{stacked:true, grid:{color:'rgba(48,54,61,0.3)'}, ticks:{color:'#8b949e',font:{size:10}}},
+          y:{stacked:true, grid:{color:'rgba(48,54,61,0.3)'}, ticks:{color:'#8b949e',font:{size:10}}, beginAtZero:true}
+        }
+      }
+    });
+  } else {
+    monthlyChart = new Chart(document.getElementById('monthlyChart'), {
+      type:'bar', data:{ labels:monthLabels, datasets:[{
+        data: sortedMonths.map(m => monthly[m]),
+        backgroundColor: COLORS[activeTab]+'99', borderColor: COLORS[activeTab], borderWidth:1, borderRadius:3
+      }]},
+      options:{
+        responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{color:'rgba(48,54,61,0.3)'}, ticks:{color:'#8b949e',font:{size:10}}},
+          y:{grid:{color:'rgba(48,54,61,0.3)'}, ticks:{color:'#8b949e',font:{size:10}}, beginAtZero:true}
+        }
+      }
+    });
+  }
+
+  const stateLabels = Object.keys(states).filter(s => states[s] > 0);
+  stateChart = new Chart(document.getElementById('stateChart'), {
+    type:'doughnut', data:{
+      labels: stateLabels.map(s => s.charAt(0).toUpperCase()+s.slice(1)),
+      datasets:[{ data: stateLabels.map(s => states[s]), backgroundColor: stateLabels.map(s => STATE_COLORS[s]||'#484f58'), borderColor:'#161b22', borderWidth:2 }]
+    },
+    options:{ responsive:true, maintainAspectRatio:true, cutout:'60%', plugins:{ legend:{ position:'bottom', labels:{ color:'#8b949e', font:{size:10}, padding:8 } } } }
+  });
+}
+
+function renderTable() {
+  let apps = getAllApps(activeTab);
+
+  if (activeState !== 'all') apps = apps.filter(a => a.state === activeState);
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    apps = apps.filter(a => (a.name||'').toLowerCase().includes(q) || a.id.toLowerCase().includes(q));
+  }
+
+  document.getElementById('tableCount').textContent = `(${apps.length})`;
+
+  const tbody = document.getElementById('appTableBody');
+  tbody.innerHTML = apps.slice(0, 200).map(a => {
+    const dt = new Date(a.created * 1000);
+    const dateStr = dt.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    const name = a.name || `App ${a.id.slice(-8)}`;
+    const qbLink = `https://arbitrum.questbook.app/dashboard/?grantId=${DATA.domains[a.domain].info.id}&chainId=10&role=community&proposalId=${a.id}`;
+    const domainColor = COLORS[a.domain];
+    return `<tr>
+      <td style="font-weight:500;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(name)}</td>
+      <td><span style="color:${domainColor};font-size:11px;font-weight:600">${a.domainName}</span></td>
+      <td><span class="state-badge state-${a.state}">${a.state}</span></td>
+      <td style="color:var(--text-muted)">${dateStr}</td>
+      <td style="color:${a.ageDays>60?'var(--red)':a.ageDays>14?'var(--orange)':'var(--text-muted)'}">${a.ageDays}d</td>
+      <td><a href="${qbLink}" target="_blank">View →</a></td>
+    </tr>`;
+  }).join('');
+
+  if (apps.length > 200) {
+    tbody.innerHTML += `<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:12px">Showing 200 of ${apps.length} — use search to narrow</td></tr>`;
+  }
+}
+
+function escHtml(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function setTab(dk) {
+  activeTab = dk;
+  render();
+}
+
+function toggleState(state) {
+  activeState = state;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.state === state));
+  renderTable();
+}
+
+document.getElementById('searchBox').addEventListener('input', e => {
+  searchQuery = e.target.value;
+  renderTable();
+});
+
+loadData();
+</script>
+</body>
+</html>
